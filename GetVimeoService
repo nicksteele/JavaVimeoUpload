@@ -1,0 +1,154 @@
+import com.user.util.DbUtil;
+import org.scribe.builder.ServiceBuilder;
+import org.scribe.builder.api.VimeoApi;
+import org.scribe.model.OAuthRequest;
+import org.scribe.model.Response;
+import org.scribe.model.Token;
+import org.scribe.model.Verb;
+import org.scribe.oauth.OAuthService;
+
+public class GetVimeoService {
+
+    private static String methodBase = "http://vimeo.com/api/rest/v2?method=%s";
+
+    /**
+     * Get a ticket from vimeo with the endpoint to upload to
+     *
+     * @param api consumer token
+     * @param user your super special snowflake token
+     * @return ticket as a String of JSON data to be parsed by whatever
+     */
+    public static String getUploadTicket(Token api, Token user){
+        OAuthService service = new ServiceBuilder().provider(VimeoApi.class)
+                .apiKey(api.getToken())
+                .apiSecret(api.getSecret())
+                .build();
+
+        Token gsToken = new Token(user.getToken(), user.getSecret());
+        String methodURL = String.format(methodBase, "vimeo.videos.upload.getTicket");
+
+        OAuthRequest orequest = new OAuthRequest(Verb.GET, methodURL);
+        orequest.addOAuthParameter("oauth_token", gsToken.getToken());
+        orequest.addQuerystringParameter("format", "json");
+        orequest.addQuerystringParameter("upload_method", "streaming");
+
+        service.signRequest(gsToken,orequest);
+        Response oresp = orequest.send();
+
+        String ticket = new String(oresp.getBody() + oresp.getCode());
+        return ticket;
+    }
+
+    /**
+     * Same as regular ticketing but this is for replacing a video
+     *
+     * @param api consumer token
+     * @param user your super special snowflake token
+     * @param videoId the id of the video you wish to replace
+     * @return
+     */
+    public static String getUploadTicket(Token api, Token user, Long videoId){
+        OAuthService service = new ServiceBuilder().provider(VimeoApi.class)
+                .apiKey(api.getToken())
+                .apiSecret(api.getSecret())
+                .build();
+
+        Token gsToken = new Token(user.getToken(), user.getSecret());
+        String protectedResourceURL = String.format(methodBase, "vimeo.videos.upload.getTicket");
+
+        OAuthRequest orequest = new OAuthRequest(Verb.GET, protectedResourceURL);
+        orequest.addOAuthParameter("oauth_token", gsToken.getToken());
+        orequest.addQuerystringParameter("format", "json");
+        orequest.addQuerystringParameter("upload_method", "streaming");
+        orequest.addQuerystringParameter("video_id", String.valueOf(videoId));
+
+
+        service.signRequest(gsToken,orequest);
+        Response oresp = orequest.send();
+
+        String ticket = new String(oresp.getBody() + oresp.getCode());
+        return ticket;
+    }
+
+    public static String getURL(String videoId){
+        return new String("https://vimeo.com/"+videoId);
+    }
+
+    /**
+     * Get the progress of an upload
+     *
+     * @param endpoint the socket
+     * @return last bytes sent to the server
+     */
+    private static long getUploadProgress(String endpoint) {
+        // Verify the upload
+        OAuthRequest request = new OAuthRequest(Verb.PUT, endpoint);
+        request.addHeader("Content-Length", "0");
+        request.addHeader("Content-Range", "bytes */*");
+        Response response = request.send();
+        //printResponse(response, "Verify Upload to " + endpoint);      //DEBUG
+        if (response.getCode() != 308 || !response.isSuccessful()) {
+            return -1;
+        }
+        String range = response.getHeader("Range");
+        return Long.parseLong(range.substring(range.lastIndexOf("-") + 1)) + 1;
+        //The + 1 at the end is because Vimeo gives you 0-whatever byte where 0 = the first byte
+    }
+
+    /**
+     * Verify chunks on the server
+     *
+     * @param api
+     * @param user
+     * @param ticketId
+     */
+    public static String getChunkVerification(Token api, Token user, Long ticketId){
+        OAuthService service = new ServiceBuilder().provider(VimeoApi.class)
+                .apiKey(api.getToken())
+                .apiSecret(api.getSecret())
+                .build();
+
+        Token gsToken = new Token(user.getToken(), user.getSecret());
+        String protectedResourceURL = String.format(methodBase, "vimeo.videos.verifyChunks");
+
+        OAuthRequest orequest = new OAuthRequest(Verb.GET, protectedResourceURL);
+        orequest.addOAuthParameter("oauth_token", gsToken.getToken());
+        orequest.addQuerystringParameter("format", "json");
+        orequest.addQuerystringParameter("upload_method", "streaming");
+
+        service.signRequest(gsToken,orequest);
+        Response oresp = orequest.send();
+
+       if(oresp.getCode() == 200){
+           String urls = oresp.getHeader("thumbnails");
+           return urls;
+       }
+       return null;
+    }
+
+    public static boolean getTicketStatus(Token api, Token user, Integer ticketId){
+        OAuthService service = new ServiceBuilder().provider(VimeoApi.class)
+                .apiKey(api.getToken())
+                .apiSecret(api.getSecret())
+                .build();
+
+        Token gsToken = new Token(user.getToken(), user.getSecret());
+        String protectedResourceURL = String.format(methodBase, "vimeo.videos.checkTicket");
+
+        OAuthRequest orequest = new OAuthRequest(Verb.GET, protectedResourceURL);
+        orequest.addOAuthParameter("oauth_token", gsToken.getToken());
+        orequest.addQuerystringParameter("format", "json");
+        orequest.addQuerystringParameter("upload_method", "streaming");
+
+        service.signRequest(gsToken,orequest);
+        Response oresp = orequest.send();
+
+        if(oresp.getCode() == 200){
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
+}
